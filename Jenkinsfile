@@ -60,7 +60,7 @@ pipeline {
                 // Example for Docker:
                 // sh "docker build -t ${APP_NAME}:${BUILD_NUMBER} ."
                 // sh "docker run -d -p 8080:8080 ${APP_NAME}:${BUILD_NUMBER}"
-                sh 'scp build/libs/${JAR_NAME} ubuntu@3.95.187.0:~/'
+                sh 'scp build/libs/${JAR_NAME} ubuntu@10.0.1.56:~/'
                 echo 'Deployment successful (placeholder).'
             }
         }
