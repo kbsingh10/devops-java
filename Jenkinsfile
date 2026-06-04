@@ -2,18 +2,22 @@ pipeline {
     agent { label 'slave' }
 
     tools {
-        jdk 'jdk-17' // Ensure this tool is configured in Jenkins Global Tool Configuration
+        jdk 'jdk-17'
         gradle 'gradle-8.14'
     }
 
     environment {
         APP_NAME = 'calculator'
         JAR_NAME = "calculator-1.0.0.jar"
+        DEPLOY_SERVER = '10.0.1.56'
+        DEPLOY_USER = 'ubuntu'
     }
 
     stages {
+
         stage('Checkout') {
             steps {
+                echo 'Checking out source code...'
                 checkout scm
             }
         }
@@ -33,17 +37,13 @@ pipeline {
             post {
                 always {
                     junit 'build/test-results/test/*.xml'
-                    //jacoco execPattern: 'build/jacoco/test.exec',
-                      //     classPattern: 'build/classes/java/main',
-                      //     sourcePattern: 'src/main/java',
-                      //     inclusionPattern: '**/*.class'
                 }
             }
         }
 
         stage('Package') {
             steps {
-                echo 'Packaging the application into a JAR...'
+                echo 'Packaging into JAR...'
                 sh './gradlew bootJar'
             }
             post {
@@ -55,28 +55,54 @@ pipeline {
 
         stage('Deploy') {
             steps {
-            echo 'Deploying to the target environment...'
-            sshagent(['app-server-key']) {
-            sh """
-                scp -o StrictHostKeyChecking=no \
-                    build/libs/${JAR_NAME} \
-                    ubuntu@10.0.1.56:~/
-            """
+                echo 'Deploying to app-server1 via Docker...'
+                sshagent(['app-server-key']) {
+                    sh """
+                        # Copy JAR and Dockerfile to app-server1
+                        scp -o StrictHostKeyChecking=no \
+                            build/libs/${JAR_NAME} \
+                            ${DEPLOY_USER}@${DEPLOY_SERVER}:~/
+
+                        scp -o StrictHostKeyChecking=no \
+                            Dockerfile \
+                            ${DEPLOY_USER}@${DEPLOY_SERVER}:~/
+
+                        # Build and run Docker container on app-server1
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} '
+                            # Stop and remove old container
+                            docker stop ${APP_NAME} || true
+                            docker rm ${APP_NAME} || true
+
+                            # Build new image
+                            docker build -t ${APP_NAME}:latest .
+
+                            # Run new container
+                            docker run -d \
+                                --name ${APP_NAME} \
+                                --restart always \
+                                -p 8080:8080 \
+                                ${APP_NAME}:latest
+
+                            echo "Container started successfully"
+                            docker ps | grep ${APP_NAME}
+                        '
+                    """
+                }
+            }
         }
-        echo 'Deployment successful.'
-    }
- }
+
     }
 
     post {
         always {
-            echo 'Pipeline finished execution.'
+            echo 'Pipeline finished.'
+            cleanWs()
         }
         success {
-            echo 'Build, Test, Package, and Deploy stages completed successfully!'
+            echo 'Build, Test, Package and Deploy completed successfully!'
         }
         failure {
-            echo 'Pipeline failed. Please check the logs for more information.'
+            echo 'Pipeline failed. Check logs above.'
         }
     }
 }
