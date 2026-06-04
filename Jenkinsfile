@@ -2,76 +2,78 @@ pipeline {
     agent any
 
     tools {
-        // Ensures JDK is available. Match the name to what is configured 
-        // in your Jenkins global tool configuration (e.g., 'JDK17' or 'JDK21')
-        jdk 'jdk-21'
-        gradle 'gradle-8.14'
+        jdk 'jdk-17' // Ensure this tool is configured in Jenkins Global Tool Configuration
+        gradle 'gradle-814'
     }
 
     environment {
-        // Sets a dedicated home for Gradle to enable dependency caching across builds
-        GRADLE_USER_HOME = "${WORKSPACE}/.gradle"
+        APP_NAME = 'calculator'
+        JAR_NAME = "calculator-1.0.0.jar"
     }
 
     stages {
-        // stage('Checkout') {
-        //     steps {
-        //         // Pulls the code from source control
-        //         checkout scm
-        //     }
-        // }
-
-        stage('Grant Execute Permissions') {
+        stage('Checkout') {
             steps {
-                // Ensures the Jenkins agent can run the wrapper script
-                sh 'chmod +x gradlew'
+                checkout scm
             }
         }
 
-        stage('Linter & Formatting') {
+        stage('Build') {
             steps {
-                // Optional but highly recommended: checks format before compilation
-                println "Checking code quality..."
-                // sh './gradlew checkstyleMain' (uncomment if you use checkstyle)
+                echo 'Building the application...'
+                sh './gradlew clean compileJava'
             }
         }
 
         stage('Test') {
             steps {
-                echo 'Running Unit Tests...'
+                echo 'Running unit tests...'
                 sh './gradlew test'
             }
             post {
                 always {
-                    // Automatically grabs JUnit test results and displays them in Jenkins UI
-                    junit '**/build/test-results/test/*.xml'
+                    junit 'build/test-results/test/*.xml'
+                    jacoco execPattern: 'build/jacoco/test.exec',
+                           classPattern: 'build/classes/java/main',
+                           sourcePattern: 'src/main/java',
+                           inclusionPattern: '**/*.class'
                 }
             }
         }
 
-        stage('Build & Package') {
+        stage('Package') {
             steps {
-                echo 'Compiling and packaging application into a JAR...'
-                // 'bootJar' for Spring Boot apps, or 'jar'/'build' for standard Java apps
-                sh './gradlew bootJar' 
+                echo 'Packaging the application into a JAR...'
+                sh './gradlew bootJar'
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'build/libs/*.jar', fingerprint: true
+                }
             }
         }
 
-        stage('Archive Artifacts') {
+        stage('Deploy') {
             steps {
-                echo 'Archiving the built JAR file...'
-                // Captures the generated JAR so it can be downloaded directly from the Jenkins UI
-                archiveArtifacts artifacts: 'build/libs/*.jar', allowEmptyArchive: false
+                echo 'Deploying to the target environment...'
+                // Example: sh 'scp build/libs/${JAR_NAME} user@server:/path/to/deploy'
+                // Example for Docker:
+                // sh "docker build -t ${APP_NAME}:${BUILD_NUMBER} ."
+                // sh "docker run -d -p 8080:8080 ${APP_NAME}:${BUILD_NUMBER}"
+                echo 'Deployment successful (placeholder).'
             }
         }
     }
 
     post {
+        always {
+            echo 'Pipeline finished execution.'
+        }
         success {
-            echo 'Pipeline successfully completed!'
+            echo 'Build, Test, Package, and Deploy stages completed successfully!'
         }
         failure {
-            echo 'Pipeline failed. Check the logs above to debug.'
+            echo 'Pipeline failed. Please check the logs for more information.'
         }
     }
 }
