@@ -3,7 +3,7 @@ pipeline {
 
     tools {
         jdk 'jdk-17' // Ensure this tool is configured in Jenkins Global Tool Configuration
-        gradle 'gradle-814'
+        gradle 'gradle-8.14'
     }
 
     environment {
