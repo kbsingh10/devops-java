@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    agent { label 'slave' }
 
     tools {
         jdk 'jdk-17' // Ensure this tool is configured in Jenkins Global Tool Configuration
