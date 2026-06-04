@@ -2,47 +2,76 @@ pipeline {
     agent any
 
     tools {
-        jdk 'jdk-25'
-        gradle 'gradle-9.5.1' 
+        // Ensures JDK is available. Match the name to what is configured 
+        // in your Jenkins global tool configuration (e.g., 'JDK17' or 'JDK21')
+        jdk 'jdk21'
+        gradle 'gradle-814'
+    }
+
+    environment {
+        // Sets a dedicated home for Gradle to enable dependency caching across builds
+        GRADLE_USER_HOME = "${WORKSPACE}/.gradle"
     }
 
     stages {
-        stage('Build') {
+        // stage('Checkout') {
+        //     steps {
+        //         // Pulls the code from source control
+        //         checkout scm
+        //     }
+        // }
+
+        stage('Grant Execute Permissions') {
             steps {
-                echo "Compiling code with Gradle..."
-                sh 'gradle assemble' 
+                // Ensures the Jenkins agent can run the wrapper script
+                sh 'chmod +x gradlew'
+            }
+        }
+
+        stage('Linter & Formatting') {
+            steps {
+                // Optional but highly recommended: checks format before compilation
+                println "Checking code quality..."
+                // sh './gradlew checkstyleMain' (uncomment if you use checkstyle)
             }
         }
 
         stage('Test') {
             steps {
-                echo "Running tests..."
-                sh 'gradle test'
+                echo 'Running Unit Tests...'
+                sh './gradlew test'
             }
             post {
                 always {
-                    junit 'build/test-results/test/*.xml'
+                    // Automatically grabs JUnit test results and displays them in Jenkins UI
+                    junit '**/build/test-results/test/*.xml'
                 }
             }
         }
 
-        stage('Package Check') {
+        stage('Build & Package') {
             steps {
-                echo "Archiving artifacts..."
-                archiveArtifacts artifacts: 'build/libs/*.jar', fingerprint: true
+                echo 'Compiling and packaging application into a JAR...'
+                // 'bootJar' for Spring Boot apps, or 'jar'/'build' for standard Java apps
+                sh './gradlew bootJar' 
             }
         }
 
-        stage('Deploy') {
-            options { timeout(time: 10, unit: 'MINUTES') }
+        stage('Archive Artifacts') {
             steps {
-                echo "Simulating Demo Deployment of Gradle build..."
-                sh 'echo "Deploying from build/libs/ to demo server..."'
+                echo 'Archiving the built JAR file...'
+                // Captures the generated JAR so it can be downloaded directly from the Jenkins UI
+                archiveArtifacts artifacts: 'build/libs/*.jar', allowEmptyArchive: false
             }
         }
     }
 
     post {
-        always { cleanWs() }
+        success {
+            echo 'Pipeline successfully completed!'
+        }
+        failure {
+            echo 'Pipeline failed. Check the logs above to debug.'
+        }
     }
 }
