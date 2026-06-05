@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     tools {
-        jdk 'jdk-17' // Ensure this tool is configured in Jenkins Global Tool Configuration
+        jdk 'jdk-17'
         gradle 'gradle-8.14'
     }
 
@@ -13,6 +13,7 @@ pipeline {
     }
 
     stages {
+
         stage('Build') {
             steps {
                 echo 'Building the application...'
@@ -28,49 +29,9 @@ pipeline {
             post {
                 always {
                     junit 'build/test-results/test/*.xml'
-                    // jacoco execPattern: 'build/jacoco/test.exec',
-                    //        classPattern: 'build/classes/java/main',
-                    //        sourcePattern: 'src/main/java',
-                    //        inclusionPattern: '**/*.class'
                 }
             }
         }
-
-        // stage('Security & code analysis'){
-        //     parallel {
-        //         stage('OWASP Dependency check'){
-        //             steps {
-        //                 echo 'Scanning third-party dependencies'
-        //                 sh 'sleep 30'
-        //                 dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
-        //             }
-        //             post {
-        //                 always {
-        //                     echo 'Updating third party dependencies report'
-        //                     dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-        //                 }
-        //             }
-        //         }
-        //         stage('SonarQube Analysis'){
-        //             steps {
-        //                 echo 'analyzing code quality'
-        //                 sh 'sleep 90'
-        //             }
-        //         }
-        //     }
-        // }
-
-        // stage("SonarQube Quality Gate"){
-        //     steps{
-        //         timeout(time: 5, unit: 'MINUTES') {
-        //             script{
-        //                 sh """
-        //                     sleep 30
-        //                 """
-        //             }
-        //         }
-        //     }
-        // }
 
         stage('Package') {
             steps {
@@ -84,32 +45,34 @@ pipeline {
             }
         }
 
-        stage('Approval'){
-            options{
-                timeout(time: 3, unit: 'MINUTES') 
-            }
-            steps {
-                input message: 'Approve deloyment to Production?', ok: 'Deploy'
-            }
-        }
+        // stage('Approval') {
+        //     steps {
+        //         input message: 'Approve deployment to Production?', ok: 'Deploy'
+        //     }
+        // }
 
         stage('Deploy') {
             steps {
-                echo 'Deploying to the target environment...'
-                // Example: sh 'scp build/libs/${JAR_NAME} user@server:/path/to/deploy'
-                // Example for Docker:
-                // sh "docker build -t ${APP_NAME}:${BUILD_NUMBER} ."
-                // sh "docker run -d -p 8080:8080 ${APP_NAME}:${BUILD_NUMBER}"
+                echo 'Deploying to server...'
+
                 script {
                     withCredentials([sshUserPrivateKey(
-                    credentialsId: 'app-server-key',     // ← Your credential ID
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    sh """
-                        echo "copying new jar to the server ${APP_SERVER}"
-                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no build/libs/${JAR_NAME} ubuntu@${APP_SERVER}:~/calculator.jar.new
-                        echo "replacing the old jar and restarting the service..."
-                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no ubuntu@${APP_SERVER} "
+                        credentialsId: 'app-server-key',
+                        keyFileVariable: 'SSH_KEY'
+                    )]) {
+
+                        sh """
+                        set -e
+
+                        echo "Copying JAR to server..."
+                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no \
+                        build/libs/${JAR_NAME} ubuntu@${APP_SERVER}:~/calculator.jar.new
+
+                        echo "Deploying on remote server..."
+
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no ubuntu@${APP_SERVER} << 'EOF'
+                        set -e
+
                         if [ -f calculator.jar ]; then
                             cp calculator.jar calculator.jar.bak
                         fi
@@ -117,14 +80,15 @@ pipeline {
                         mv calculator.jar.new calculator.jar
 
                         sudo systemctl restart calculator.service
-                        echo '✅ Deployment completed and service restarted'
-                        echo 'Service Status:'
+
+                        echo "✅ Deployment completed"
                         sudo systemctl status calculator.service --no-pager -l
-                    "
-                """
+EOF
+                        """
+                    }
                 }
-                }
-                echo 'Deployment successful (placeholder).'
+
+                echo 'Deployment stage finished.'
             }
         }
     }
@@ -134,10 +98,10 @@ pipeline {
             echo 'Pipeline finished execution.'
         }
         success {
-            echo 'Build, Test, Package, and Deploy stages completed successfully!'
+            echo 'Build, Test, Package, Deploy completed successfully!'
         }
         failure {
-            echo 'Pipeline failed. Please check the logs for more information.'
+            echo 'Pipeline failed. Check logs.'
         }
     }
 }
