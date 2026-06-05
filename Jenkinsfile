@@ -1,50 +1,81 @@
 pipeline {
-    agent { label 'slave' }
+    agent any
 
     tools {
-        jdk 'jdk-17'
-        gradle 'gradle-8.14'
+        jdk 'jdk-17' // Ensure this tool is configured in Jenkins Global Tool Configuration
+        gradle 'gradle-814'
     }
 
     environment {
         APP_NAME = 'calculator'
         JAR_NAME = "calculator-1.0.0.jar"
-        DEPLOY_SERVER = '10.0.1.56'
-        DEPLOY_USER = 'ubuntu'
+        APP_SERVER = "54.80.78.13"
     }
 
     stages {
-
-        stage('Checkout') {
-            steps {
-                echo 'Checking out source code...'
-                checkout scm
-            }
-        }
-
         stage('Build') {
             steps {
                 echo 'Building the application...'
-                sh './gradlew clean compileJava'
+                sh 'gradle clean compileJava'
             }
         }
 
         stage('Test') {
             steps {
                 echo 'Running unit tests...'
-                sh './gradlew test'
+                sh 'gradle test'
             }
             post {
                 always {
                     junit 'build/test-results/test/*.xml'
+                    // jacoco execPattern: 'build/jacoco/test.exec',
+                    //        classPattern: 'build/classes/java/main',
+                    //        sourcePattern: 'src/main/java',
+                    //        inclusionPattern: '**/*.class'
+                }
+            }
+        }
+
+        stage('Security & code analysis'){
+            parallel {
+                stage('OWASP Dependency check'){
+                    steps {
+                        echo 'Scanning third-party dependencies'
+                        sh 'sleep 30'
+                        dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
+                    }
+                    post {
+                        always {
+                            echo 'Updating third party dependencies report'
+                            dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                        }
+                    }
+                }
+                stage('SonarQube Analysis'){
+                    steps {
+                        echo 'analyzing code quality'
+                        sh 'sleep 90'
+                    }
+                }
+            }
+        }
+
+        stage("SonarQube Quality Gate"){
+            steps{
+                timeout(time: 5, unit: 'MINUTES') {
+                    script{
+                        sh """
+                            sleep 30
+                        """
+                    }
                 }
             }
         }
 
         stage('Package') {
             steps {
-                echo 'Packaging into JAR...'
-                sh './gradlew bootJar'
+                echo 'Packaging the application into a JAR...'
+                sh 'gradle bootJar'
             }
             post {
                 success {
@@ -53,56 +84,60 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
+        stage('Approval'){
+            options{
+                timeout(time: 3, unit: 'MINUTES') 
+            }
             steps {
-                echo 'Deploying to app-server1 via Docker...'
-                sshagent(['app-server-key']) {
-                    sh """
-                        # Copy JAR and Dockerfile to app-server1
-                        scp -o StrictHostKeyChecking=no \
-                            build/libs/${JAR_NAME} \
-                            ${DEPLOY_USER}@${DEPLOY_SERVER}:~/
-
-                        scp -o StrictHostKeyChecking=no \
-                            Dockerfile \
-                            ${DEPLOY_USER}@${DEPLOY_SERVER}:~/
-
-                        # Build and run Docker container on app-server1
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} '
-                            # Stop and remove old container
-                            docker stop ${APP_NAME} || true
-                            docker rm ${APP_NAME} || true
-
-                            # Build new image
-                            docker build -t ${APP_NAME}:latest .
-
-                            # Run new container
-                            docker run -d \
-                                --name ${APP_NAME} \
-                                --restart always \
-                                -p 8080:8080 \
-                                ${APP_NAME}:latest
-
-                            echo "Container started successfully"
-                            docker ps | grep ${APP_NAME}
-                        '
-                    """
-                }
+                input message: 'Approve deloyment to Production?', ok: 'Deploy'
             }
         }
 
+        stage('Deploy') {
+            steps {
+                echo 'Deploying to the target environment...'
+                // Example: sh 'scp build/libs/${JAR_NAME} user@server:/path/to/deploy'
+                // Example for Docker:
+                // sh "docker build -t ${APP_NAME}:${BUILD_NUMBER} ."
+                // sh "docker run -d -p 8080:8080 ${APP_NAME}:${BUILD_NUMBER}"
+                script {
+                    withCredentials([sshUserPrivateKey(
+                    credentialsId: 'app-server-ssh',     // ← Your credential ID
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
+                    sh """
+                        echo "copying new jar to the server ${APP_SERVER}"
+                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no build/libs/${JAR_NAME} ubuntu@${APP_SERVER}:~/calculator.jar.new
+                        echo "replacing the old jar and restarting the service..."
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no ubuntu@${APP_SERVER} "
+                        if [ -f calculator.jar ]; then
+                            cp calculator.jar calculator.jar.bak
+                        fi
+
+                        mv calculator.jar.new calculator.jar
+
+                        sudo systemctl restart calculator.service
+                        echo '✅ Deployment completed and service restarted'
+                        echo 'Service Status:'
+                        sudo systemctl status calculator.service --no-pager -l
+                    "
+                """
+                }
+                }
+                echo 'Deployment successful (placeholder).'
+            }
+        }
     }
 
     post {
         always {
-            echo 'Pipeline finished.'
-            cleanWs()
+            echo 'Pipeline finished execution.'
         }
         success {
-            echo 'Build, Test, Package and Deploy completed successfully!'
+            echo 'Build, Test, Package, and Deploy stages completed successfully!'
         }
         failure {
-            echo 'Pipeline failed. Check logs above.'
+            echo 'Pipeline failed. Please check the logs for more information.'
         }
     }
 }

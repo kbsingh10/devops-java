@@ -33,3 +33,4 @@ test-output/
 
 # Application
 app.pid
+Dockerfile
