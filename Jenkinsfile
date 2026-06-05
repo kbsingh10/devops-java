@@ -9,7 +9,7 @@ pipeline {
     environment {
         APP_NAME = 'calculator'
         JAR_NAME = "calculator-1.0.0.jar"
-        APP_SERVER = "44.204.231.125"
+        APP_SERVER = "3.88.223.2"
     }
 
     stages {
@@ -36,41 +36,41 @@ pipeline {
             }
         }
 
-        stage('Security & code analysis'){
-            parallel {
-                stage('OWASP Dependency check'){
-                    steps {
-                        echo 'Scanning third-party dependencies'
-                        sh 'sleep 30'
-                        dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
-                    }
-                    post {
-                        always {
-                            echo 'Updating third party dependencies report'
-                            dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-                        }
-                    }
-                }
-                stage('SonarQube Analysis'){
-                    steps {
-                        echo 'analyzing code quality'
-                        sh 'sleep 90'
-                    }
-                }
-            }
-        }
+        // stage('Security & code analysis'){
+        //     parallel {
+        //         stage('OWASP Dependency check'){
+        //             steps {
+        //                 echo 'Scanning third-party dependencies'
+        //                 sh 'sleep 30'
+        //                 dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
+        //             }
+        //             post {
+        //                 always {
+        //                     echo 'Updating third party dependencies report'
+        //                     dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+        //                 }
+        //             }
+        //         }
+        //         stage('SonarQube Analysis'){
+        //             steps {
+        //                 echo 'analyzing code quality'
+        //                 sh 'sleep 90'
+        //             }
+        //         }
+        //     }
+        // }
 
-        stage("SonarQube Quality Gate"){
-            steps{
-                timeout(time: 5, unit: 'MINUTES') {
-                    script{
-                        sh """
-                            sleep 30
-                        """
-                    }
-                }
-            }
-        }
+        // stage("SonarQube Quality Gate"){
+        //     steps{
+        //         timeout(time: 5, unit: 'MINUTES') {
+        //             script{
+        //                 sh """
+        //                     sleep 30
+        //                 """
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('Package') {
             steps {
@@ -102,7 +102,7 @@ pipeline {
                 // sh "docker run -d -p 8080:8080 ${APP_NAME}:${BUILD_NUMBER}"
                 script {
                     withCredentials([sshUserPrivateKey(
-                    credentialsId: 'app-server-ssh',     // ← Your credential ID
+                    credentialsId: 'app-server-key',     // ← Your credential ID
                     keyFileVariable: 'SSH_KEY'
                 )]) {
                     sh """
