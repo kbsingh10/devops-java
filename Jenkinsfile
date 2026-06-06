@@ -61,37 +61,44 @@ pipeline {
                         keyFileVariable: 'SSH_KEY'
                     )]) {
 
+                        // 1. Upload using strict paths
                         sh """
-                        set -e
-
-                        echo "Copying JAR to server..."
-                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no \
-                        build/libs/${JAR_NAME} ubuntu@${APP_SERVER}:~/calculator.jar.new
-
-                        echo "Deploying on remote server..."
-
-                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no ubuntu@${APP_SERVER} << 'EOF'
-                        set -e
-
-                        if [ -f calculator.jar ]; then
-                            cp calculator.jar calculator.jar.bak
-                        fi
-
-                        mv calculator.jar.new calculator.jar
-
-                        sudo systemctl restart calculator.service
-
-                        echo "✅ Deployment completed"
-                        sudo systemctl status calculator.service --no-pager -l
-EOF
+                            set -e
+                            echo "Copying JAR to server..."
+                            scp -i ${SSH_KEY} -o StrictHostKeyChecking=no \
+                            build/libs/${JAR_NAME} ubuntu@${APP_SERVER}:/home/ubuntu/calculator.jar.new
                         """
+
+                        // 2. Separate string execution to prevent Here-Doc formatting chaos
+                        def remoteCommands = """
+                            set -e
+                            echo "Deploying on remote server..."
+                            
+                            cd /home/ubuntu
+
+                            if [ -f calculator.jar ]; then
+                                cp calculator.jar calculator.jar.bak
+                            fi
+
+                            # Explicitly move the fresh jar into place
+                            mv calculator.jar.new calculator.jar
+
+                            echo "Restarting application service..."
+                            sudo systemctl restart calculator.service
+
+                            echo "Waiting 8 seconds for Java application boot-up validation..."
+                            sleep 8
+
+                            # If it crashes during startup, this status call will fail and break the pipeline
+                            sudo systemctl status calculator.service --no-pager -l
+                        """
+
+                        sh "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ubuntu@${APP_SERVER} \"${remoteCommands}\""
                     }
                 }
-
                 echo 'Deployment stage finished.'
             }
         }
-    }
 
     post {
         always {
