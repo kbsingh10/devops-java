@@ -36,29 +36,29 @@ pipeline {
             }
         }
 
-        // stage('Security & code analysis'){
-        //     parallel {
-        //         stage('OWASP Dependency check'){
-        //             steps {
-        //                 echo 'Scanning third-party dependencies'
-        //                 sh 'sleep 30'
-        //                 dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
-        //             }
-        //             post {
-        //                 always {
-        //                     echo 'Updating third party dependencies report'
-        //                     dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-        //                 }
-        //             }
-        //         }
-        //         stage('SonarQube Analysis'){
-        //             steps {
-        //                 echo 'analyzing code quality'
-        //                 sh 'sleep 90'
-        //             }
-        //         }
-        //     }
-        // }
+        stage('Security & code analysis'){
+            parallel {
+                stage('OWASP Dependency check'){
+                    steps {
+                        echo 'Scanning third-party dependencies'
+                        sh 'sleep 30'
+                        dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
+                    }
+                    post {
+                        always {
+                            echo 'Updating third party dependencies report'
+                            dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                        }
+                    }
+                }
+                stage('SonarQube Analysis'){
+                    steps {
+                        echo 'analyzing code quality'
+                        sh 'sleep 90'
+                    }
+                }
+            }
+        }
 
         // stage("SonarQube Quality Gate"){
         //     steps{
