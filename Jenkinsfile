@@ -9,7 +9,7 @@ pipeline {
     environment {
         APP_NAME = 'calculator'
         JAR_NAME = "calculator-1.0.0.jar"
-        APP_SERVER = "44.204.231.125"
+        APP_SERVER = "18.205.243.48" //apserver ip
     }
 
     stages {
@@ -102,7 +102,7 @@ pipeline {
                 // sh "docker run -d -p 8080:8080 ${APP_NAME}:${BUILD_NUMBER}"
                 script {
                     withCredentials([sshUserPrivateKey(
-                    credentialsId: 'app-server-ssh',     // ← Your credential ID
+                    credentialsId: 'app-server-key',     // ← Your credential ID
                     keyFileVariable: 'SSH_KEY'
                 )]) {
                     sh """
