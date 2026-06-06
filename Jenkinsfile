@@ -99,6 +99,7 @@ pipeline {
                 echo 'Deployment stage finished.'
             }
         }
+    }
 
     post {
         always {
