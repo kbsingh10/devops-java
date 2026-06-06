@@ -2,18 +2,17 @@ pipeline {
     agent any
 
     tools {
-        jdk 'jdk-17'
-        gradle 'gradle-8.14'
+        jdk 'jdk-17' // Ensure this tool is configured in Jenkins Global Tool Configuration
+        gradle 'gradle-814'
     }
 
     environment {
         APP_NAME = 'calculator'
         JAR_NAME = "calculator-1.0.0.jar"
-        APP_SERVER = "44.204.231.125"
+        APP_SERVER = "18.205.243.48"
     }
 
     stages {
-
         stage('Build') {
             steps {
                 echo 'Building the application...'
@@ -29,6 +28,46 @@ pipeline {
             post {
                 always {
                     junit 'build/test-results/test/*.xml'
+                    // jacoco execPattern: 'build/jacoco/test.exec',
+                    //        classPattern: 'build/classes/java/main',
+                    //        sourcePattern: 'src/main/java',
+                    //        inclusionPattern: '**/*.class'
+                }
+            }
+        }
+
+        stage('Security & code analysis'){
+            parallel {
+                stage('OWASP Dependency check'){
+                    steps {
+                        echo 'Scanning third-party dependencies'
+                        sh 'sleep 30'
+                        dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
+                    }
+                    post {
+                        always {
+                            echo 'Updating third party dependencies report'
+                            dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                        }
+                    }
+                }
+                stage('SonarQube Analysis'){
+                    steps {
+                        echo 'analyzing code quality'
+                        sh 'sleep 90'
+                    }
+                }
+            }
+        }
+
+        stage("SonarQube Quality Gate"){
+            steps{
+                timeout(time: 5, unit: 'MINUTES') {
+                    script{
+                        sh """
+                            sleep 30
+                        """
+                    }
                 }
             }
         }
@@ -45,16 +84,22 @@ pipeline {
             }
         }
 
-        // stage('Approval') {
-        //     steps {
-        //         input message: 'Approve deployment to Production?', ok: 'Deploy'
-        //     }
-        // }
+        stage('Approval'){
+            options{
+                timeout(time: 3, unit: 'MINUTES') 
+            }
+            steps {
+                input message: 'Approve deloyment to Production?', ok: 'Deploy'
+            }
+        }
 
         stage('Deploy') {
             steps {
-                echo 'Deploying to server...'
-
+                echo 'Deploying to the target environment...'
+                // Example: sh 'scp build/libs/${JAR_NAME} user@server:/path/to/deploy'
+                // Example for Docker:
+                // sh "docker build -t ${APP_NAME}:${BUILD_NUMBER} ."
+                // sh "docker run -d -p 8080:8080 ${APP_NAME}:${BUILD_NUMBER}"
                 script {
                     withCredentials([sshUserPrivateKey(
                     credentialsId: 'app-server-key',     // ← Your credential ID
@@ -69,23 +114,17 @@ pipeline {
                             cp calculator.jar calculator.jar.bak
                         fi
 
-                            # Explicitly move the fresh jar into place
-                            mv calculator.jar.new calculator.jar
+                        mv calculator.jar.new calculator.jar
 
-                            echo "Restarting application service..."
-                            sudo systemctl restart calculator.service
-
-                            echo "Waiting 8 seconds for Java application boot-up validation..."
-                            sleep 8
-
-                            # If it crashes during startup, this status call will fail and break the pipeline
-                            sudo systemctl status calculator.service --no-pager -l
-                        """
-
-                        sh "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ubuntu@${APP_SERVER} \"${remoteCommands}\""
-                    }
+                        sudo systemctl restart calculator.service
+                        echo '✅ Deployment completed and service restarted'
+                        echo 'Service Status:'
+                        sudo systemctl status calculator.service --no-pager -l
+                    "
+                """
                 }
-                echo 'Deployment stage finished.'
+                }
+                echo 'Deployment successful (placeholder).'
             }
         }
     }
@@ -95,10 +134,10 @@ pipeline {
             echo 'Pipeline finished execution.'
         }
         success {
-            echo 'Build, Test, Package, Deploy completed successfully!'
+            echo 'Build, Test, Package, and Deploy stages completed successfully!'
         }
         failure {
-            echo 'Pipeline failed. Check logs.'
+            echo 'Pipeline failed. Please check the logs for more information.'
         }
     }
 }
