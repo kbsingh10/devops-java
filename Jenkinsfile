@@ -60,17 +60,17 @@ pipeline {
             }
         }
 
-        stage("SonarQube Quality Gate"){
-            steps{
-                timeout(time: 5, unit: 'MINUTES') {
-                    script{
-                        sh """
-                            sleep 30
-                        """
-                    }
-                }
-            }
-        }
+        // stage("SonarQube Quality Gate"){
+        //     steps{
+        //         timeout(time: 5, unit: 'MINUTES') {
+        //             script{
+        //                 sh """
+        //                     sleep 30
+        //                 """
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('Package') {
             steps {
