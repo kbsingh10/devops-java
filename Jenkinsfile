@@ -9,7 +9,7 @@ pipeline {
     environment {
         APP_NAME = 'calculator'
         JAR_NAME = "calculator-1.0.0.jar"
-        APP_SERVER = "18.205.243.48"
+        APP_SERVER = "52.23.253.88"
     }
 
     stages {
