@@ -160,7 +160,7 @@ pipeline {
             steps {
                 script {
                 withCredentials([sshUserPrivateKey(
-                    credentialsId: 'app-server-ssh',     // ← Your credential ID
+                    credentialsId: 'app-server-key',     // ← Your credential ID
                     keyFileVariable: 'SSH_KEY'
                 )])    {
                 sh '''
