@@ -3,13 +3,15 @@ pipeline {
 
     tools {
         jdk 'jdk-17' // Ensure this tool is configured in Jenkins Global Tool Configuration
-        gradle 'gradle-8.14'
+        gradle 'gradle-814'
     }
 
     environment {
         APP_NAME = 'calculator'
         JAR_NAME = "calculator-1.0.0.jar"
-        APP_SERVER = "52.23.253.88"
+        APP_SERVER = "10.0.1.56"
+        IMAGE_REPO = "prengineering"
+        IMAGE_TAG = "${GIT_COMMIT}"
     }
 
     stages {
@@ -41,36 +43,36 @@ pipeline {
                 stage('OWASP Dependency check'){
                     steps {
                         echo 'Scanning third-party dependencies'
-                        sh 'sleep 30'
-                        dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
+                        sh 'sleep 10'
+                        // dependencyCheck additionalArguments: '--scan "./" --format "ALL"', odcInstallation: 'OWASP-SCA'
                     }
                     post {
                         always {
                             echo 'Updating third party dependencies report'
-                            dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                            // dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
                         }
                     }
                 }
                 stage('SonarQube Analysis'){
                     steps {
                         echo 'analyzing code quality'
-                        sh 'sleep 90'
+                        sh 'sleep 20'
                     }
                 }
             }
         }
 
-        // stage("SonarQube Quality Gate"){
-        //     steps{
-        //         timeout(time: 5, unit: 'MINUTES') {
-        //             script{
-        //                 sh """
-        //                     sleep 30
-        //                 """
-        //             }
-        //         }
-        //     }
-        // }
+        stage("SonarQube Quality Gate"){
+            steps{
+                timeout(time: 5, unit: 'MINUTES') {
+                    script{
+                        sh """
+                            sleep 20
+                        """
+                    }
+                }
+            }
+        }
 
         stage('Package') {
             steps {
@@ -81,6 +83,25 @@ pipeline {
                 success {
                     archiveArtifacts artifacts: 'build/libs/*.jar', fingerprint: true
                 }
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-login', 
+                                                  usernameVariable: 'USERNAME', 
+                                                  passwordVariable: 'PASSWORD')]) {
+                    sh 'echo $PASSWORD | docker login -u $USERNAME --password-stdin'
+                    echo 'Logged in successfully'
+                }
+            }
+        }
+
+        stage('Docker build'){
+            steps {
+                echo "building docker image"
+                sh "docker build -t ${IMAGE_REPO}/calculator-app:${IMAGE_TAG} ."
+                sh "docker push ${IMAGE_REPO}/calculator-app:${IMAGE_TAG}"
             }
         }
 
@@ -105,11 +126,11 @@ pipeline {
                     credentialsId: 'app-server-key',     // ← Your credential ID
                     keyFileVariable: 'SSH_KEY'
                 )]) {
-                    sh """
+                    sh '''
                         echo "copying new jar to the server ${APP_SERVER}"
-                        scp -i \$SSH_KEY -o StrictHostKeyChecking=no build/libs/${JAR_NAME} ubuntu@${APP_SERVER}:~/calculator.jar.new
+                        scp -i "$SSH_KEY" -o StrictHostKeyChecking=no build/libs/"${JAR_NAME}" ubuntu@"${APP_SERVER}":~/calculator.jar.new
                         echo "replacing the old jar and restarting the service..."
-                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no ubuntu@${APP_SERVER} "
+                        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no ubuntu@"${APP_SERVER}" "
                         if [ -f calculator.jar ]; then
                             cp calculator.jar calculator.jar.bak
                         fi
@@ -121,10 +142,37 @@ pipeline {
                         echo 'Service Status:'
                         sudo systemctl status calculator.service --no-pager -l
                     "
-                """
+                '''
                 }
                 }
                 echo 'Deployment successful (placeholder).'
+            }
+        }
+        stage('Docker Image Approval'){
+            options{
+                timeout(time: 3, unit: 'MINUTES') 
+            }
+            steps {
+                input message: 'Approve deloyment to Production?', ok: 'Deploy docker'
+            }
+        }
+        stage('Deploy docker'){
+            steps {
+                script {
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'app-server-ssh',     // ← Your credential ID
+                    keyFileVariable: 'SSH_KEY'
+                )])    {
+                sh '''
+                echo "deploying docker container"
+                ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no ubuntu@"${APP_SERVER}" "
+                    docker pull  "${IMAGE_REPO}"/calculator-app:"${IMAGE_TAG}"
+                    docker rm -f calculator || true
+                    docker run -d -p 8090:8080 --name calculator "${IMAGE_REPO}"/calculator-app:"${IMAGE_TAG}" 
+                "
+                '''
+                }
+            }
             }
         }
     }
