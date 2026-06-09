@@ -10,7 +10,7 @@ pipeline {
         APP_NAME = 'calculator'
         JAR_NAME = "calculator-1.0.0.jar"
         APP_SERVER = "10.0.1.56"
-        IMAGE_REPO = "prengineering"
+        IMAGE_REPO = "kbsingh10"
         IMAGE_TAG = "${GIT_COMMIT}"
     }
 
